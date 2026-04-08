@@ -210,9 +210,8 @@ Open your browser and go to: **http://localhost:5000**
 | Member | Role | Modules |
 |--------|------|---------|
 | **R. Manoj Naik** | Emotion Detection & UI | `emotion_detection.py`, Frontend (HTML/CSS/JS), `visualize.py` |
-| **R. Indu** | Agentic AI & NLP | `agentic_ai.py`, `voice_sentiment.py`, `explainable_ai.py`, `sacred_wisdom.py` |
-| **SK. Sania** | Backend & Database | `app.py`, `conversation.py`, `database.py` |
-
+| **R. Indu** | Backend & Database | `app.py`, `conversation.py`, `database.py` |
+| **SK. Sania** |Agentic AI & NLP | `agentic_ai.py`, `voice_sentiment.py`, `explainable_ai.py`, `sacred_wisdom.py` |
 ---
 
 ## 🔮 Future Scope
