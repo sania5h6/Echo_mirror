@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EchoMirror — Your Reflection</title>
+    <meta name="description" content="EchoMirror: AI-powered personal emotional reflection system with real-time emotion detection.">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="mirror-page">
+    <!-- Top Bar -->
+    <header id="topbar">
+        <div class="topbar-left">
+            <span class="logo">🪞</span>
+            <h1>EchoMirror</h1>
+        </div>
+        <div class="topbar-center">
+            <span id="emotion-badge" class="emotion-badge neutral">NEUTRAL</span>
+            <span id="confidence-text" class="confidence-text">0%</span>
+        </div>
+        <div class="topbar-right">
+            <button id="tts-toggle" class="btn-small" title="Toggle voice replies">🔊</button>
+            <span id="user-display">{{ user.display_name }}</span>
+            <button id="logout-btn" class="btn-small" title="Logout">⏻</button>
+        </div>
+    </header>
+
+    <!-- Main Layout -->
+    <main id="main-layout">
+        <!-- Left Panel: Camera + XAI -->
+        <aside id="left-panel">
+            <div class="panel-section" id="camera-section">
+                <div class="panel-header">
+                    <h3>📷 Mirror View</h3>
+                    <button id="camera-toggle" class="btn-tiny">Start Camera</button>
+                </div>
+                <div id="camera-container">
+                    <video id="camera-feed" autoplay muted playsinline></video>
+                    <canvas id="camera-canvas" style="display:none"></canvas>
+                    <div id="camera-placeholder">
+                        <p>📷 Camera is <strong>optional</strong><br>Enable it for face emotion detection, or just chat using text/voice</p>
+                    </div>
+                    <div id="camera-emotion-overlay"></div>
+                </div>
+            </div>
+
+            <!-- XAI Panel -->
+            <div class="panel-section" id="xai-section">
+                <div class="panel-header"><h3>🧠 Why This Emotion?</h3></div>
+                <div id="xai-content">
+                    <p class="xai-placeholder">Start a conversation or enable camera to see AI explanations</p>
+                </div>
+            </div>
+
+            <!-- Emotion Scores -->
+            <div class="panel-section" id="scores-section">
+                <div class="panel-header"><h3>📊 Emotion Scores</h3></div>
+                <div id="emotion-bars"></div>
+            </div>
+        </aside>
+
+        <!-- Center: Chat -->
+        <section id="chat-section">
+            <div id="chat-messages">
+                <div class="message bot-message">
+                    <div class="message-avatar">🪞</div>
+                    <div class="message-content">
+                        <p>Welcome to EchoMirror, <strong>{{ user.display_name }}</strong>. This is your safe space — no judgment, no rush. How are you feeling right now?</p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="chat-input-area">
+                <div id="sentiment-indicator">
+                    <span id="sentiment-label">Sentiment: Neutral</span>
+                    <span id="polarity-value">0.00</span>
+                </div>
+                <div id="input-row">
+                    <textarea id="chat-input" placeholder="Type or use mic..." rows="1"></textarea>
+                    <button id="mic-btn" class="mic-btn" title="Hold to speak">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                    </button>
+                    <button id="send-btn" title="Send">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2 11 13"/><path d="m22 2-7 20-4-9-9-4 20-7z"/></svg>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Right Panel: Wisdom + Stats -->
+        <aside id="right-panel">
+            <div class="panel-section" id="wisdom-section">
+                <div class="panel-header"><h3>✨ Sacred Wisdom</h3></div>
+                <div id="wisdom-content">
+                    <blockquote id="wisdom-quote">
+                        <p>"Peace comes from within. Do not seek it without."</p>
+                        <cite>— Buddha</cite>
+                    </blockquote>
+                </div>
+            </div>
+
+            <div class="panel-section" id="agentic-section">
+                <div class="panel-header"><h3>🤖 Agentic AI</h3></div>
+                <div id="agentic-content">
+                    <p class="agentic-idle">Monitoring your emotional state...</p>
+                </div>
+            </div>
+
+            <div class="panel-section" id="session-section">
+                <div class="panel-header"><h3>📈 This Session</h3></div>
+                <div id="session-stats">
+                    <div class="stat-item">
+                        <span class="stat-label">Turn</span>
+                        <span id="stat-turn" class="stat-value">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Emotion</span>
+                        <span id="stat-emotion" class="stat-value">neutral</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Mood</span>
+                        <span id="stat-mood" class="stat-value">—</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </main>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

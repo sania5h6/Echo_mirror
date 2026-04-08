@@ -1,11 +1,14 @@
 """
-EchoMirror - Step 2: Voice + Text Input & Sentiment Analysis (v3)
+EchoMirror - Step 2: Voice + Text Input & Sentiment Analysis (v4)
 Changes:
   - User can choose: VOICE mode or TEXT mode
   - Voice mode: real-time transcription + Done button
   - Text mode: user types freely, clicks Analyse
   - Both modes give same sentiment analysis + EchoMirror response
   - GPU accelerated Whisper medium
+  - VADER + TextBlob blended sentiment (v4)
+  - Complete 35-entry emotion×sentiment fusion map
+  - SentimentAnalyzer class for integration
 """
 
 import os
@@ -24,6 +27,15 @@ import queue
 import time
 from textblob import TextBlob
 from datetime import datetime
+
+# VADER for better emotional text scoring
+try:
+    from nltk.sentiment.vader import SentimentIntensityAnalyzer
+    _vader = SentimentIntensityAnalyzer()
+    HAS_VADER = True
+except ImportError:
+    HAS_VADER = False
+    print("[VoiceSentiment] VADER not available — using TextBlob only")
 
 
 # ─────────────────────────────────────────
@@ -65,9 +77,19 @@ def get_sentiment_label(polarity):
 
 
 def analyze_sentiment(text):
+    """Blended sentiment: VADER (60%) + TextBlob (40%) for better emotional text scoring."""
     blob = TextBlob(text)
-    polarity = blob.sentiment.polarity
+    tb_polarity = blob.sentiment.polarity
     subjectivity = blob.sentiment.subjectivity
+
+    if HAS_VADER:
+        vader_scores = _vader.polarity_scores(text)
+        vader_polarity = vader_scores["compound"]  # -1 to +1
+        # Weighted blend: VADER is better for emotional language
+        polarity = 0.6 * vader_polarity + 0.4 * tb_polarity
+    else:
+        polarity = tb_polarity
+
     label, advice = get_sentiment_label(polarity)
     return {
         "text": text,
@@ -79,26 +101,73 @@ def analyze_sentiment(text):
 
 
 def fuse_signals(face_emotion, voice_sentiment):
+    """Complete 35-entry fusion map: 7 emotions × 5 sentiment levels."""
     fusion_map = {
-        ("happy",    "Positive"):      "You're genuinely joyful — keep it up!",
-        ("happy",    "Negative"):      "Your face smiles but your words suggest stress. Want to talk?",
-        ("sad",      "Negative"):      "You seem really down. It's okay to feel this way.",
-        ("sad",      "Positive"):      "You're staying strong despite the sadness — that's courage.",
-        ("angry",    "Negative"):      "You sound and look frustrated. Let's take a breath together.",
-        ("neutral",  "Neutral"):       "You're calm and balanced right now.",
-        ("neutral",  "Positive"):      "You're content and at peace.",
-        ("fear",     "Negative"):      "You seem anxious. Remember — you are safe.",
-        ("surprise", "Positive"):      "Something exciting just happened! Tell me more!",
-        ("sad",      "Neutral"):       "You're holding it together quietly. That takes strength.",
-        ("angry",    "Neutral"):       "Something's bothering you beneath the surface. I'm here.",
-        ("fear",     "Neutral"):       "It's okay to feel uncertain. Take it one step at a time.",
-        ("neutral",  "Negative"):      "Your words carry some weight today. Want to share more?",
-        ("happy",    "Neutral"):       "You seem at ease. That's a good place to be.",
+        # Happy
         ("happy",    "Very Positive"): "You're absolutely glowing today! Love to see it.",
+        ("happy",    "Positive"):      "You're genuinely joyful — keep it up!",
+        ("happy",    "Neutral"):       "You seem at ease. That's a good place to be.",
+        ("happy",    "Negative"):      "Your face smiles but your words suggest stress. Want to talk?",
+        ("happy",    "Very Negative"): "You're putting on a brave face. It's okay to let the mask down here.",
+        # Sad
+        ("sad",      "Very Positive"): "You're finding light even in sadness — that's real strength.",
+        ("sad",      "Positive"):      "You're staying strong despite the sadness — that's courage.",
+        ("sad",      "Neutral"):       "You're holding it together quietly. That takes strength.",
+        ("sad",      "Negative"):      "You seem really down. It's okay to feel this way.",
         ("sad",      "Very Negative"): "I can feel the weight you're carrying. Please be gentle with yourself.",
+        # Angry
+        ("angry",    "Very Positive"): "That fire in you is being channeled into something good.",
+        ("angry",    "Positive"):      "You're frustrated but optimistic. That's powerful energy.",
+        ("angry",    "Neutral"):       "Something's bothering you beneath the surface. I'm here.",
+        ("angry",    "Negative"):      "You sound and look frustrated. Let's take a breath together.",
+        ("angry",    "Very Negative"): "You're carrying a lot of anger right now. Let's find a release.",
+        # Fear
+        ("fear",     "Very Positive"): "You feel nervous but excited — that's butterflies, not fear!",
+        ("fear",     "Positive"):      "You're anxious but hopeful. That courage will carry you.",
+        ("fear",     "Neutral"):       "It's okay to feel uncertain. Take it one step at a time.",
+        ("fear",     "Negative"):      "You seem anxious. Remember — you are safe.",
+        ("fear",     "Very Negative"): "Fear and worry are heavy right now. Breathe — you're not alone.",
+        # Surprise
+        ("surprise", "Very Positive"): "Something wonderful just happened! Tell me everything!",
+        ("surprise", "Positive"):      "Something exciting just happened! Tell me more!",
+        ("surprise", "Neutral"):       "Something unexpected caught your attention. What was it?",
+        ("surprise", "Negative"):      "That caught you off guard in a tough way. How are you processing it?",
+        ("surprise", "Very Negative"): "That was a shock. Take a moment — I'm right here.",
+        # Disgust
+        ("disgust",  "Very Positive"): "Something bothers you, but you're focusing on the good. Respect.",
+        ("disgust",  "Positive"):      "You're frustrated with something but handling it well.",
+        ("disgust",  "Neutral"):       "Something doesn't sit right with you. Your instincts matter.",
+        ("disgust",  "Negative"):      "That clearly bothers you deeply. Your feelings are valid.",
+        ("disgust",  "Very Negative"): "You're really upset by something. Let's talk through it.",
+        # Neutral
+        ("neutral",  "Very Positive"): "You're calm and full of positivity. Beautiful balance.",
+        ("neutral",  "Positive"):      "You're content and at peace.",
+        ("neutral",  "Neutral"):       "You're calm and balanced right now.",
+        ("neutral",  "Negative"):      "Your words carry some weight today. Want to share more?",
+        ("neutral",  "Very Negative"): "You look calm, but your words tell a different story. I'm listening.",
     }
     key = (face_emotion.lower(), voice_sentiment)
     return fusion_map.get(key, f"I hear you. Whatever you're feeling right now is valid.")
+
+
+# ─────────────────────────────────────────
+# SENTIMENT ANALYZER CLASS (for integration)
+# ─────────────────────────────────────────
+class SentimentAnalyzer:
+    """Importable class for conversation.py and ct.py integration."""
+
+    @staticmethod
+    def analyze(text: str) -> dict:
+        return analyze_sentiment(text)
+
+    @staticmethod
+    def fuse(face_emotion: str, voice_sentiment: str) -> str:
+        return fuse_signals(face_emotion, voice_sentiment)
+
+    @staticmethod
+    def get_polarity(text: str) -> float:
+        result = analyze_sentiment(text)
+        return result["polarity"]
 
 
 def log_result(result, mode):

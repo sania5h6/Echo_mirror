@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EchoMirror — Login</title>
+    <meta name="description" content="EchoMirror: Personal Emotional Reflection System. Login to start your self-reflection journey.">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .password-wrapper { position: relative; }
+        .password-wrapper input { padding-right: 44px; }
+        .toggle-password {
+            position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+            background: none; border: none; color: var(--text-muted); cursor: pointer;
+            font-size: 16px; padding: 4px; transition: color 0.2s;
+        }
+        .toggle-password:hover { color: var(--text-primary); }
+        .forgot-link { display: block; text-align: right; margin-top: -10px; margin-bottom: 12px; font-size: 12px; }
+        .forgot-link a { color: var(--accent); text-decoration: none; }
+        .forgot-link a:hover { text-decoration: underline; }
+        .success-msg { color: var(--green); font-size: 13px; margin-top: 12px; text-align: center; min-height: 18px; }
+
+        /* OTP Steps */
+        .otp-step { display: none; }
+        .otp-step.active { display: block; animation: fadeUp 0.4s ease; }
+        .otp-input {
+            letter-spacing: 12px; font-size: 24px; font-weight: 700;
+            text-align: center; color: var(--green);
+        }
+        .otp-timer { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 8px; }
+        .otp-resend { text-align: center; margin-top: 8px; }
+        .otp-resend a { color: var(--accent); text-decoration: none; font-size: 12px; cursor: pointer; }
+        .otp-resend a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body class="auth-page">
+    <div class="auth-container">
+        <div class="auth-card">
+            <div class="auth-header">
+                <div class="mirror-icon">🪞</div>
+                <h1 id="auth-title">EchoMirror</h1>
+                <p class="tagline">At every reflection, we heal, we rise, we rediscover you.</p>
+            </div>
+
+            <!-- LOGIN -->
+            <form id="login-form" class="auth-form active">
+                <div class="form-group">
+                    <label for="login-username">Username</label>
+                    <input type="text" id="login-username" placeholder="Enter your username" required autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label for="login-password">Password</label>
+                    <div class="password-wrapper">
+                        <input type="password" id="login-password" placeholder="Enter your password" required autocomplete="current-password">
+                        <button type="button" class="toggle-password" onclick="togglePwd('login-password', this)">👁</button>
+                    </div>
+                </div>
+                <div class="forgot-link"><a href="#" id="show-forgot">Forgot password?</a></div>
+                <button type="submit" id="login-btn" class="btn-primary">Enter Mirror</button>
+                <div id="login-error" class="error-msg"></div>
+                <p class="switch-text">New here? <a href="#" id="show-signup">Create an account</a></p>
+            </form>
+
+            <!-- SIGNUP -->
+            <form id="signup-form" class="auth-form">
+                <div class="form-group">
+                    <label for="signup-name">Display Name</label>
+                    <input type="text" id="signup-name" placeholder="What should I call you?" required>
+                </div>
+                <div class="form-group">
+                    <label for="signup-email">Email</label>
+                    <input type="email" id="signup-email" placeholder="your.email@example.com" required>
+                </div>
+                <div class="form-group">
+                    <label for="signup-username">Username</label>
+                    <input type="text" id="signup-username" placeholder="Choose a username" required autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label for="signup-password">Password</label>
+                    <div class="password-wrapper">
+                        <input type="password" id="signup-password" placeholder="Create a password (4+ chars)" required autocomplete="new-password">
+                        <button type="button" class="toggle-password" onclick="togglePwd('signup-password', this)">👁</button>
+                    </div>
+                </div>
+                <button type="submit" id="signup-btn" class="btn-primary">Create Account</button>
+                <div id="signup-error" class="error-msg"></div>
+                <p class="switch-text">Already have an account? <a href="#" id="show-login">Log in</a></p>
+            </form>
+
+            <!-- FORGOT PASSWORD — Step 1: Enter email + username, get OTP -->
+            <div id="forgot-form" class="auth-form">
+                <div id="otp-step-1" class="otp-step active">
+                    <div class="form-group">
+                        <label for="forgot-email">Registered Email</label>
+                        <input type="email" id="forgot-email" placeholder="Enter your registered email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="forgot-username">Username</label>
+                        <input type="text" id="forgot-username" placeholder="Enter your username" required>
+                    </div>
+                    <button type="button" id="send-otp-btn" class="btn-primary" onclick="sendOTP()">Send OTP</button>
+                    <div id="otp-step1-error" class="error-msg"></div>
+                    <div id="otp-step1-success" class="success-msg"></div>
+                </div>
+
+                <!-- Step 2: Enter OTP + new password -->
+                <div id="otp-step-2" class="otp-step">
+                    <p style="text-align:center; color:var(--text-secondary); font-size:13px; margin-bottom:16px;">
+                        OTP sent to <strong id="otp-email-display"></strong>
+                    </p>
+                    <div class="form-group">
+                        <label for="otp-code">Enter OTP</label>
+                        <input type="text" id="otp-code" class="otp-input" placeholder="______" maxlength="6" required>
+                    </div>
+                    <div class="otp-timer" id="otp-timer">Expires in 5:00</div>
+                    <div class="otp-resend"><a onclick="sendOTP()">Resend OTP</a></div>
+                    <div class="form-group" style="margin-top:16px;">
+                        <label for="forgot-newpwd">New Password</label>
+                        <div class="password-wrapper">
+                            <input type="password" id="forgot-newpwd" placeholder="Enter new password (4+ chars)" required>
+                            <button type="button" class="toggle-password" onclick="togglePwd('forgot-newpwd', this)">👁</button>
+                        </div>
+                    </div>
+                    <button type="button" id="reset-btn" class="btn-primary" onclick="verifyAndReset()">Reset Password</button>
+                    <div id="otp-step2-error" class="error-msg"></div>
+                    <div id="otp-step2-success" class="success-msg"></div>
+                </div>
+
+                <p class="switch-text" style="margin-top:20px;">Remember it? <a href="#" id="show-login-from-forgot">Back to login</a></p>
+            </div>
+        </div>
+
+        <div class="auth-footer">
+            <p>Team Echo Mirror — R. Manoj Naik | R. Indu | SK. Sania</p>
+        </div>
+    </div>
+
+    <script>
+        // ─── Password toggle ───
+        function togglePwd(inputId, btn) {
+            const inp = document.getElementById(inputId);
+            if (inp.type === 'password') { inp.type = 'text'; btn.textContent = '🙈'; }
+            else { inp.type = 'password'; btn.textContent = '👁'; }
+        }
+
+        // ─── Form switching ───
+        function showForm(formId, title) {
+            document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
+            document.getElementById(formId).classList.add('active');
+            document.getElementById('auth-title').textContent = title;
+        }
+
+        document.getElementById('show-signup').addEventListener('click', e => { e.preventDefault(); showForm('signup-form', 'Create Account'); });
+        document.getElementById('show-login').addEventListener('click', e => { e.preventDefault(); showForm('login-form', 'EchoMirror'); });
+        document.getElementById('show-forgot').addEventListener('click', e => { e.preventDefault(); showForm('forgot-form', 'Reset Password'); });
+        document.getElementById('show-login-from-forgot').addEventListener('click', e => { e.preventDefault(); showForm('login-form', 'EchoMirror'); });
+
+        // ─── Login ───
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('login-btn');
+            const errDiv = document.getElementById('login-error');
+            btn.disabled = true; btn.textContent = 'Entering...'; errDiv.textContent = '';
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        username: document.getElementById('login-username').value,
+                        password: document.getElementById('login-password').value,
+                    })
+                });
+                const data = await res.json();
+                if (data.success) { window.location.href = '/mirror'; }
+                else { errDiv.textContent = data.error || 'Login failed'; }
+            } catch (err) { errDiv.textContent = 'Connection error'; }
+            btn.disabled = false; btn.textContent = 'Enter Mirror';
+        });
+
+        // ─── Signup ───
+        document.getElementById('signup-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('signup-btn');
+            const errDiv = document.getElementById('signup-error');
+            btn.disabled = true; btn.textContent = 'Creating...'; errDiv.textContent = '';
+            try {
+                const res = await fetch('/api/signup', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        display_name: document.getElementById('signup-name').value,
+                        email: document.getElementById('signup-email').value,
+                        username: document.getElementById('signup-username').value,
+                        password: document.getElementById('signup-password').value,
+                    })
+                });
+                const data = await res.json();
+                if (data.success) { window.location.href = '/mirror'; }
+                else { errDiv.textContent = data.error || 'Signup failed'; }
+            } catch (err) { errDiv.textContent = 'Connection error'; }
+            btn.disabled = false; btn.textContent = 'Create Account';
+        });
+
+        // ─── OTP — Send OTP ───
+        let otpTimerInterval = null;
+        async function sendOTP() {
+            const email = document.getElementById('forgot-email').value.trim();
+            const username = document.getElementById('forgot-username').value.trim();
+            const errDiv = document.getElementById('otp-step1-error');
+            const okDiv = document.getElementById('otp-step1-success');
+            const btn = document.getElementById('send-otp-btn');
+
+            if (!email || !username) { errDiv.textContent = 'Enter both email and username'; return; }
+
+            btn.disabled = true; btn.textContent = 'Sending...'; errDiv.textContent = ''; okDiv.textContent = '';
+
+            try {
+                const res = await fetch('/api/send-otp', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ email, username })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    okDiv.textContent = 'OTP sent! Check your email.';
+                    // Switch to step 2
+                    document.getElementById('otp-email-display').textContent = email;
+                    setTimeout(() => {
+                        document.getElementById('otp-step-1').classList.remove('active');
+                        document.getElementById('otp-step-2').classList.add('active');
+                    }, 1000);
+                    // Start timer
+                    startOTPTimer();
+                } else {
+                    errDiv.textContent = data.error || 'Failed to send OTP';
+                }
+            } catch (err) { errDiv.textContent = 'Connection error'; }
+            btn.disabled = false; btn.textContent = 'Send OTP';
+        }
+
+        function startOTPTimer() {
+            let seconds = 300; // 5 minutes
+            const timerEl = document.getElementById('otp-timer');
+            if (otpTimerInterval) clearInterval(otpTimerInterval);
+            otpTimerInterval = setInterval(() => {
+                seconds--;
+                const m = Math.floor(seconds / 60);
+                const s = seconds % 60;
+                timerEl.textContent = `Expires in ${m}:${s.toString().padStart(2, '0')}`;
+                if (seconds <= 0) {
+                    clearInterval(otpTimerInterval);
+                    timerEl.textContent = 'OTP expired — request a new one';
+                    timerEl.style.color = 'var(--red)';
+                }
+            }, 1000);
+        }
+
+        // ─── OTP — Verify & Reset ───
+        async function verifyAndReset() {
+            const email = document.getElementById('forgot-email').value.trim();
+            const otp = document.getElementById('otp-code').value.trim();
+            const newPwd = document.getElementById('forgot-newpwd').value;
+            const errDiv = document.getElementById('otp-step2-error');
+            const okDiv = document.getElementById('otp-step2-success');
+            const btn = document.getElementById('reset-btn');
+
+            if (!otp || !newPwd) { errDiv.textContent = 'Enter OTP and new password'; return; }
+
+            btn.disabled = true; btn.textContent = 'Resetting...'; errDiv.textContent = ''; okDiv.textContent = '';
+
+            try {
+                const res = await fetch('/api/verify-reset', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ email, otp, new_password: newPwd })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    okDiv.textContent = '✅ Password reset! Redirecting to login...';
+                    if (otpTimerInterval) clearInterval(otpTimerInterval);
+                    setTimeout(() => {
+                        document.getElementById('otp-step-2').classList.remove('active');
+                        document.getElementById('otp-step-1').classList.add('active');
+                        showForm('login-form', 'EchoMirror');
+                    }, 2000);
+                } else {
+                    errDiv.textContent = data.error || 'Reset failed';
+                }
+            } catch (err) { errDiv.textContent = 'Connection error'; }
+            btn.disabled = false; btn.textContent = 'Reset Password';
+        }
+    </script>
+</body>
+</html>

@@ -22,10 +22,19 @@ load_dotenv()
 # CRISIS KEYWORDS
 # ─────────────────────────────────────────
 CRISIS_KEYWORDS = [
+    # Direct self-harm / suicidal ideation
     "kill myself", "end my life", "want to die", "suicide", "suicidal",
     "don't want to live", "no reason to live", "better off dead",
     "can't go on", "hurt myself", "self harm", "cutting myself",
-    "worthless", "nobody cares", "everyone hates me", "give up on life"
+    "worthless", "nobody cares", "everyone hates me", "give up on life",
+    # Additional patterns (v2)
+    "want to disappear", "i want to disappear", "no one loves me",
+    "i can't take it", "can't take it anymore", "i can't do this anymore",
+    "end it all", "what's the point of living", "no point in living",
+    "i don't belong here", "the world is better without me",
+    "i want to sleep forever", "i wish i was dead", "wish i was never born",
+    "i have no future", "nothing matters anymore", "i'm a burden",
+    "no one would notice", "no one will miss me",
 ]
 
 CRISIS_RESOURCES = """
@@ -39,6 +48,7 @@ CRISIS_RESOURCES = """
 # BREATHING EXERCISE TRIGGERS
 # ─────────────────────────────────────────
 ANXIETY_EMOTIONS = ["fear", "angry", "disgust"]
+CONSECUTIVE_NEGATIVE_FOR_BREATHING = 2  # Must see 2+ negative turns before offering
 
 BREATHING_EXERCISES = [
     {
@@ -112,6 +122,8 @@ class AgenticAI:
         self.breathing_done_this_session = False
         self.turn_count = 0
         self._breathing_index = 0
+        self._consecutive_negative_turns = 0
+        self._streak_intervention_cache = {}  # emotion -> message (avoid repeat API calls)
 
     # ─── CRISIS DETECTION ───
     def detect_crisis(self, text: str) -> bool:
@@ -151,12 +163,15 @@ class AgenticAI:
 
     # ─── BREATHING EXERCISE ───
     def should_offer_breathing(self, emotion: str, turn: int) -> bool:
-        """Offer breathing exercise for anxiety/fear emotions"""
+        """Offer breathing exercise only after sustained negative emotion."""
         if self.breathing_done_this_session:
             return False
-        if emotion.lower() in ANXIETY_EMOTIONS and turn >= 2:
-            return True
-        return False
+        if emotion.lower() in ANXIETY_EMOTIONS:
+            self._consecutive_negative_turns += 1
+        else:
+            self._consecutive_negative_turns = max(0, self._consecutive_negative_turns - 1)
+        return (self._consecutive_negative_turns >= CONSECUTIVE_NEGATIVE_FOR_BREATHING
+                and turn >= 3)
 
     def get_breathing_exercise(self) -> dict:
         """Get next breathing exercise (rotates between options)"""
@@ -175,6 +190,10 @@ class AgenticAI:
         if streak < 2:
             return None
 
+        # Check cache first (avoid calling API repeatedly for same emotion)
+        if emotion in self._streak_intervention_cache:
+            return self._streak_intervention_cache[emotion]
+
         if emotion == "sad" and streak >= 2:
             prompt = f"The user has been feeling sad for {streak} consecutive days. Write a warm, empathetic 2-sentence check-in message as EchoMirror. Don't be preachy. Be human."
         elif emotion == "angry" and streak >= 2:
@@ -190,16 +209,24 @@ class AgenticAI:
                 max_tokens=80,
                 messages=[{"role": "user", "content": prompt}]
             )
-            return response.choices[0].message.content.strip()
+            msg = response.choices[0].message.content.strip()
+            self._streak_intervention_cache[emotion] = msg
+            return msg
         except Exception as e:
             print(f"[AgenticAI] Streak intervention error: {e}")
             return None
 
     # ─── GOAL TRACKING ───
     def set_session_goal(self, goal: str):
-        """Set a goal for this session"""
+        """Set a goal for this session and persist to DB."""
         self.session_goal = goal
         print(f"[AgenticAI] Session goal set: {goal}")
+        # Persist across sessions
+        if self.db:
+            try:
+                self.db.save_goal(goal)
+            except Exception as e:
+                print(f"[AgenticAI] Goal save error: {e}")
 
     def check_goal_progress(self, user_message: str) -> str | None:
         """Check if user message relates to their session goal"""
@@ -213,6 +240,96 @@ class AgenticAI:
         if matches >= 2:
             return f"I noticed you're touching on your goal — '{self.session_goal}'. How are you feeling about your progress?"
         return None
+
+    # ─── GOAL REFRAMING MODULE (Slide 9) ───
+    def detect_goal_shift(self, user_message: str, current_emotion: str) -> dict | None:
+        """
+        Detect if the user's focus has shifted from their stored goals.
+        Returns a dict with shift info, or None if no shift detected.
+        """
+        if not self.db:
+            return None
+
+        try:
+            past_goals = self.db.get_recent_goals(3)
+        except Exception:
+            return None
+
+        if not past_goals:
+            return None
+
+        msg_lower = user_message.lower()
+        latest_goal = past_goals[0]["goal"]
+
+        # Check if current message is about a completely different topic
+        goal_words = set(latest_goal.lower().split())
+        msg_words = set(msg_lower.split())
+        # Remove common words
+        stopwords = {"i", "to", "the", "a", "and", "is", "my", "me", "it",
+                     "want", "be", "do", "have", "that", "this", "in", "for"}
+        goal_words -= stopwords
+        msg_words -= stopwords
+
+        overlap = goal_words & msg_words
+        if len(goal_words) > 0 and len(overlap) == 0 and len(msg_words) > 3:
+            # User is talking about something very different from their goal
+            return {
+                "shift_detected": True,
+                "previous_goal": latest_goal,
+                "current_topic": user_message,
+                "emotion_at_goal": past_goals[0].get("emotion", "unknown"),
+                "current_emotion": current_emotion,
+            }
+        return None
+
+    def suggest_reframing(self, shift_info: dict) -> str | None:
+        """
+        Use AI to suggest goal reframing when user's focus has shifted.
+        """
+        if not self.client or not shift_info:
+            return None
+
+        prompt = f"""A user previously set this goal: \"{shift_info['previous_goal']}\"
+(They were feeling {shift_info['emotion_at_goal']} at the time.)
+
+Now they're talking about: \"{shift_info['current_topic'][:100]}\"
+Current emotion: {shift_info['current_emotion']}
+
+As EchoMirror (a compassionate friend), write 1-2 sentences that:
+1. Gently acknowledge the shift ("it seems like your focus has moved from X")
+2. Ask if they want to reframe their goal to match where they are now
+Keep it casual and short. No therapy talk."""
+
+        try:
+            response = self.client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                max_tokens=80,
+                temperature=0.7,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            print(f"[AgenticAI] Reframing error: {e}")
+            return None
+
+    def get_goal_context_for_prompt(self) -> str:
+        """Build goal context for injection into the AI system prompt."""
+        if not self.db:
+            return ""
+        try:
+            goals = self.db.get_recent_goals(3)
+            if not goals:
+                return ""
+            lines = ["[User's Goals]"]
+            for g in goals:
+                status = g['status']
+                if status == 'reframed':
+                    lines.append(f"  • {g['goal']} → reframed")
+                else:
+                    lines.append(f"  • {g['goal']} (set when {g['emotion']})")
+            return "\n".join(lines)
+        except Exception:
+            return ""
 
     # ─── END OF SESSION REFLECTION ───
     def get_session_reflection_prompt(self, emotion: str, polarity: float) -> str:
@@ -251,6 +368,7 @@ class AgenticAI:
             "breathing_exercise": None,
             "streak_intervention": None,
             "goal_check": None,
+            "goal_reframe": None,
             "motivational_nudge": None,
             "session_reflection": None,
         }
@@ -271,7 +389,15 @@ class AgenticAI:
         if goal_msg:
             result["goal_check"] = goal_msg
 
-        # 4. Motivational nudge
+        # 4. Goal reframing (check for topic shift)
+        if turn >= 3 and turn % 3 == 0:  # Check every 3 turns
+            shift = self.detect_goal_shift(user_message, emotion)
+            if shift:
+                reframe_msg = self.suggest_reframing(shift)
+                if reframe_msg:
+                    result["goal_reframe"] = reframe_msg
+
+        # 5. Motivational nudge
         nudge = self.get_motivational_nudge(turn, polarity)
         if nudge:
             result["motivational_nudge"] = nudge
@@ -281,6 +407,16 @@ class AgenticAI:
     def get_end_of_session(self, emotion: str, polarity: float) -> str:
         """Call this when user ends the session"""
         return self.get_session_reflection_prompt(emotion, polarity)
+
+    def save_session_summary(self, emotion: str, polarity: float):
+        """Auto-save daily summary to DB on session end."""
+        try:
+            from database import MemoryDB
+            db = MemoryDB()
+            db.save_daily_summary()
+            print("[AgenticAI] Daily summary saved.")
+        except Exception as e:
+            print(f"[AgenticAI] Could not save summary: {e}")
 
 
 # ─────────────────────────────────────────

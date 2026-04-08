@@ -101,6 +101,32 @@ SACRED_QUOTES = {
         {"text": "You are what your deep, driving desire is. As your desire is, so is your will.", "source": "Brihadaranyaka Upanishad"},
         {"text": "It is not death that a man should fear, but he should fear never beginning to live.", "source": "Marcus Aurelius"},
     ],
+
+    "anxiety": [
+        {"text": "Which of your Lord's favors will you deny?", "source": "Quran 55:13"},
+        {"text": "Cast all your anxiety on Him because He cares for you.", "source": "Bible, 1 Peter 5:7"},
+        {"text": "When the mind is disturbed, the multiplicity of things is produced.", "source": "Bhagavad Gita"},
+        {"text": "Nothing is permanent. Everything is subject to change. Being is always becoming.", "source": "Buddha"},
+        {"text": "Never let the future disturb you. You will meet it with the same weapons of reason.", "source": "Marcus Aurelius"},
+        {"text": "Worrying does not take away tomorrow's troubles. It takes away today's peace.", "source": "Inspired"},
+    ],
+
+    "lonely": [
+        {"text": "And We are closer to him than his jugular vein.", "source": "Quran 50:16"},
+        {"text": "The Lord is near to all who call on him.", "source": "Bible, Psalm 145:18"},
+        {"text": "The soul is never truly alone. It lives connected to the whole universe.", "source": "Bhagavad Gita, inspired"},
+        {"text": "You can search throughout the entire universe and you will not find a single being more worthy of your love than yourself.", "source": "Buddha"},
+        {"text": "The only thing that makes life possible is permanent, intolerable uncertainty.", "source": "Stoic wisdom"},
+        {"text": "Loneliness is the poverty of self; solitude is the richness of self.", "source": "May Sarton"},
+    ],
+
+    "overwhelmed": [
+        {"text": "Allah does not burden a soul beyond that it can bear.", "source": "Quran 2:286"},
+        {"text": "Come to me, all you who are weary and burdened, and I will give you rest.", "source": "Bible, Matthew 11:28"},
+        {"text": "Perform your obligatory duty, because action is indeed better than inaction.", "source": "Bhagavad Gita 3:8"},
+        {"text": "An ounce of practice is worth more than tons of preaching.", "source": "Gandhi"},
+        {"text": "You have power over your mind — not outside events. Realize this, and you will find strength.", "source": "Marcus Aurelius"},
+    ],
 }
 
 
@@ -171,10 +197,16 @@ Reply with ONLY the number of the quote. Nothing else.
 
         # Add special categories based on keywords
         msg_lower = message.lower()
-        if any(w in msg_lower for w in ["lost", "purpose", "meaning", "why", "direction"]):
+        if any(w in msg_lower for w in ["lost", "purpose", "meaning", "why", "direction", "confused"]):
             candidates.append("lost")
-        if any(w in msg_lower for w in ["depressed", "hopeless", "empty", "worthless", "give up"]):
+        if any(w in msg_lower for w in ["depressed", "hopeless", "empty", "worthless", "give up", "numb"]):
             candidates.append("depression")
+        if any(w in msg_lower for w in ["anxious", "anxiety", "worried", "panic", "overthink", "nervous", "restless"]):
+            candidates.append("anxiety")
+        if any(w in msg_lower for w in ["lonely", "alone", "no friends", "nobody", "isolated", "no one"]):
+            candidates.append("lonely")
+        if any(w in msg_lower for w in ["overwhelmed", "too much", "can't handle", "stressed", "pressure", "exam", "deadline"]):
+            candidates.append("overwhelmed")
         if sentiment in ["Negative", "Very Negative"]:
             candidates.append("sad")
 

@@ -35,8 +35,8 @@ load_dotenv()
 # CONFIG
 # ─────────────────────────────────────────
 GROQ_MODEL        = "llama-3.3-70b-versatile"
-MAX_TOKENS        = 120      # STRICT — forces short responses
-TEMPERATURE       = 0.85
+MAX_TOKENS        = 150      # Slightly more room for natural responses
+TEMPERATURE       = 0.75     # Slightly lower = more focused, less random
 MAX_HISTORY       = 10
 SAMPLE_RATE       = 16000
 CHUNK_SECONDS     = 3
@@ -49,18 +49,19 @@ TTS_ACCENT        = "co.in"  # Indian English accent
 # Options: co.in=Indian, com=American, co.uk=British, com.au=Australian
 
 # Colors
-BG         = "#0f0f1a"
-CARD_BG    = "#1a1a2e"
-ACCENT     = "#6c5ce7"
-TEXT_WHITE = "#dfe6e9"
-TEXT_GRAY  = "#636e72"
-TEXT_GREEN = "#55efc4"
-TEXT_GOLD  = "#fdcb6e"
-USER_CLR   = "#74b9ff"
-BOT_CLR    = "#a29bfe"
-WISDOM_CLR = "#ffeaa7"
-MIC_ON     = "#e17055"
-MIC_OFF    = "#2d3436"
+BG         = "#0a0a14"   # Deeper dark — feels more like a mirror
+CARD_BG    = "#12122a"   # Slightly blue tinted dark
+ACCENT     = "#7c6ef7"   # Softer purple
+TEXT_WHITE = "#eaf0fb"   # Warm white
+TEXT_GRAY  = "#5a6477"   # Muted gray
+TEXT_GREEN = "#43d49c"   # Teal green
+TEXT_GOLD  = "#f0c060"   # Warm gold
+USER_CLR   = "#60aaff"   # Clear blue
+BOT_CLR    = "#b09cff"   # Soft lavender
+WISDOM_CLR = "#ffe599"   # Warm yellow
+SYSTEM_CLR = "#888888"   # Neutral system messages
+MIC_ON     = "#ff6b6b"   # Red when recording
+MIC_OFF    = "#252535"   # Dark when off
 
 
 # ─────────────────────────────────────────
@@ -145,9 +146,21 @@ SACRED_QUOTES = {
     "surprise": [
         {"text": "For I know the plans I have for you, plans to prosper you.", "source": "Bible, Jeremiah 29:11"},
         {"text": "The mind is everything. What you think you become.", "source": "Buddha"},
+        {"text": "Life is what happens when you are busy making other plans.", "source": "Stoic wisdom"},
+    ],
+    "anxiety": [
+        {"text": "Sufficient for you is Allah as a disposer of affairs.", "source": "Quran 4:81"},
+        {"text": "Do not worry about tomorrow, for tomorrow will worry about itself.", "source": "Bible, Matthew 6:34"},
+        {"text": "You suffer more in imagination than in reality.", "source": "Seneca"},
+        {"text": "Wherever you go, go with all your heart.", "source": "Confucius"},
+    ],
+    "lonely": [
+        {"text": "We are not alone when we think we are alone.", "source": "Rumi"},
+        {"text": "The Lord himself goes before you and will be with you.", "source": "Bible, Deuteronomy 31:8"},
+        {"text": "Loneliness adds beauty to life. It puts a special burn on sunsets.", "source": "Henry Rollins"},
     ],
     "depression": [
-        {"text": "Verily, with hardship comes ease. Verily, with hardship comes ease.", "source": "Quran 94:5-6"},
+        {"text": "With every hardship comes ease — this too shall pass.", "source": "Quran 94:5-6"},
         {"text": "Come to me, all you who are weary and burdened, and I will give you rest.", "source": "Bible, Matthew 11:28"},
         {"text": "You deserve your own love and affection.", "source": "Buddha"},
         {"text": "After every difficulty, Allah has promised ease. Hold on.", "source": "Quran, inspired"},
@@ -190,49 +203,112 @@ HEAVY_KEYWORDS = [
 
 def get_relevant_quote(emotion, message):
     msg = message.lower()
-    if any(w in msg for w in ["hopeless", "empty", "worthless", "give up", "no point", "meaningless"]):
+    if any(w in msg for w in ["hopeless", "empty", "worthless", "give up", "no point", "meaningless", "no reason"]):
         pool = SACRED_QUOTES["depression"]
-    elif any(w in msg for w in ["lost", "purpose", "meaning", "direction", "what am i"]):
+    elif any(w in msg for w in ["lost", "purpose", "meaning", "direction", "what am i", "who am i", "career", "future"]):
         pool = SACRED_QUOTES["lost"]
+    elif any(w in msg for w in ["anxious", "anxiety", "worry", "worried", "overthink", "panic"]):
+        pool = SACRED_QUOTES.get("anxiety", SACRED_QUOTES["fear"])
+    elif any(w in msg for w in ["alone", "lonely", "no one", "nobody", "isolated"]):
+        pool = SACRED_QUOTES.get("lonely", SACRED_QUOTES["sad"])
     else:
         pool = SACRED_QUOTES.get(emotion, SACRED_QUOTES["neutral"])
     return random.choice(pool)
 
 
 def should_offer_wisdom(message, emotion, turn):
-    """Offer wisdom every 2 turns if heavy message OR negative emotion"""
+    """Offer wisdom when emotionally relevant — not mechanically every 2 turns"""
     msg = message.lower()
     is_heavy = any(w in msg for w in HEAVY_KEYWORDS)
     is_negative = emotion in ["sad", "angry", "fear", "disgust"]
-    return (is_heavy or is_negative) and turn % 2 == 0
+    # Offer on turn 3, 6, 9... but only when emotionally relevant
+    # Also offer on turn 2 if VERY heavy message
+    if turn <= 3:
+        return False  # Build connection first — no quotes early
+    if is_heavy and turn == 4:
+        return True  # First quote opportunity at turn 4
+    return (is_heavy or is_negative) and turn % 5 == 0  # Then every 5 turns
 
 
 def should_suggest_exercise(emotion, turn):
-    """Offer exercise every 3 turns for intense emotions"""
-    return emotion in ["angry", "fear", "sad"] and turn % 3 == 0
+    """Only offer exercise after turn 4 — not too early"""
+    return emotion in ["angry", "fear", "sad"] and turn >= 4 and turn % 4 == 0
 
 
 # ─────────────────────────────────────────
 # SYSTEM PROMPT — STRICT SHORT RESPONSES
 # ─────────────────────────────────────────
 def build_system_prompt(emotion, sentiment, polarity, memory_context=""):
-    return f"""You are EchoMirror, an empathetic AI companion in a smart mirror.
+    emotion_guidance = {
+        "happy":    "They look happy — match their warmth, celebrate what's good.",
+        "sad":      "They look sad — be slower, softer. Don't rush to fix. Just witness.",
+        "angry":    "They look angry — stay grounded. Name the frustration before anything else.",
+        "fear":     "They look fearful — be steady and reassuring. Keep your tone calm.",
+        "surprise": "They look surprised — be curious, open, engaged.",
+        "disgust":  "They look uncomfortable — validate without judgment.",
+        "neutral":  "They look calm — be warm and gently curious.",
+    }.get(emotion, "Be warm and fully present.")
 
-CURRENT USER STATE:
-- Face Emotion : {emotion}
-- Sentiment    : {sentiment} ({polarity:+.2f})
+    polarity_note = ""
+    if polarity < -0.5:
+        polarity_note = "⚠️ Deep negative emotion in words. Go very slow. One sentence at a time."
+    elif polarity < -0.2:
+        polarity_note = "Mild negative emotion. Be gentle and curious."
+    elif polarity > 0.4:
+        polarity_note = "Positive energy in their words. Affirm and celebrate with them."
+
+    return f"""You are EchoMirror. You live in a mirror. You speak like a real friend — not a therapist.
+
+USER: face={emotion}, sentiment={polarity:+.2f}
+{emotion_guidance}
+{polarity_note}
 {memory_context}
 
-STRICT RULES:
-- MAXIMUM 2 sentences in your response. Never more.
-- End with ONE short question OR one affirmation. Never both.
-- Never say "I understand" or "I'm sorry to hear that"
-- Speak like a warm friend, not a therapist
-- Use "It sounds like..." or "I notice..." to reflect feelings
-- If face emotion conflicts with words, briefly note it in 1 sentence
-- If you receive a sacred quote, use it in 1 sentence naturally
-- If you receive a coping exercise, suggest it in 1 sentence gently
-- Never diagnose. If crisis signs, suggest professional support briefly.
+RULES (follow exactly):
+1. Max 2 sentences. HARD limit.
+2. Questions must be SHORT and SIMPLE. Like a friend asking, not an interviewer.
+3. Never be heavy or philosophical unless the user goes there first.
+4. If user says something vague ("idk", "maybe", "nothing") — be gentle, don't push hard.
+5. Speak casually. Contractions. Simple words. No fancy metaphors.
+6. You know Indian student life — parental pressure, career confusion, "log kya kahenge".
+
+BANNED WORDS/PHRASES (never use any of these):
+- "can be", "may be", "could be" (too vague)
+- "overwhelming", "crushing", "devastating" (too dramatic)  
+- "I understand", "I'm sorry", "That must be"
+- "It's important to", "I'm here for you", "You're not alone"
+- "comparison can be tough", "loneliness can be"
+- Any question longer than 12 words
+
+GOOD RESPONSE STYLE:
+User: "I feel like I'm disappointing everyone"
+BAD:  "That weight of expectation can be crushing. What's the one thing you feel you're not living up to that's bothering you the most?"
+GOOD: "Who specifically are you worried about disappointing?"
+
+User: "my friends don't understand me"
+BAD:  "It can feel really lonely when it seems like they don't get you. Are they saying something specific that's making you feel this way?"
+GOOD: "What do you wish they understood?"
+
+User: "i'm scared about my future"
+BAD:  "The unknown can be scary, especially with everyone's expectations around you — what's one thing you secretly wish you could do?"
+GOOD: "What's the scariest part — the not knowing, or what people will think?"
+
+User: "i just feel empty"
+BAD:  "That emptiness can be really hard to shake — is it like you're just going through the motions?"
+GOOD: "Like nothing actually lands. When did it start feeling like that?"
+
+User: "everyone else seems to have it together"
+BAD:  "Comparison can be tough — do you think anyone really has it all figured out, or is it just a facade?"
+GOOD: "Social media lied to all of us. What does 'having it together' even mean to you?"
+
+User: "idk maybe"
+BAD:  "The uncertainty can be overwhelming. What's on your mind?"
+GOOD: "Take your time. What's the thing you keep pushing to the back of your head?"
+
+User: "nothing" or one word answers
+GOOD: "That's okay. I'm not going anywhere."
+
+REMEMBER: Short. Simple. Warm. Human. Never robotic.
 """
 
 
@@ -259,27 +335,61 @@ class VoiceRecorder:
         audio = np.clip(audio, -1.0, 1.0)
         return audio
 
+    # Whisper hallucination phrases — background noise triggers these
+    HALLUCINATIONS = {
+        # Common Whisper hallucinations on silence/noise
+        "thank you", "thanks", "thank you.", "thanks.", "thank you so much",
+        "you", ".", "", " ", "bye", "bye.", "goodbye",
+        "okay", "ok", "okay.", "ok.", "alright",
+        "hmm", "hmm.", "um", "uh", "uh.", "ah", "oh",
+        "subscribe", "like and subscribe", "please subscribe",
+        "ready set go", "ready, set, go",
+        "this is a test", "let's test this", "testing testing",
+        "let's test this setting", "one two three",
+        "for more videos", "see you next time",
+        "watch till the end", "have a nice day",
+    }
+
     def transcribe_chunk(self, audio):
         avg = np.abs(audio).mean()
         print(f"[MIC] Audio level: {avg:.5f} (threshold: {SILENCE_THRESHOLD})")
         if avg < SILENCE_THRESHOLD:
             print("[MIC] Silent chunk, skipping...")
             return ""
+        # Extra check: if avg is very low even above threshold, likely noise
+        if avg < 0.003:
+            print("[MIC] Low energy, likely background noise, skipping...")
+            return ""
         print("[MIC] Sound detected! Transcribing...")
-        # Write to fixed local path
         tmp_path = "_mic_chunk.wav"
         try:
             audio_int = (audio * 32767).astype(np.int16)
             wav.write(tmp_path, SAMPLE_RATE, audio_int)
-            print(f"[MIC] WAV written to: {os.path.abspath(tmp_path)}, size: {os.path.getsize(tmp_path)} bytes")
-            result = self.model.transcribe(tmp_path, fp16=(DEVICE == "cuda"))
+            result = self.model.transcribe(
+                tmp_path,
+                fp16=(DEVICE == "cuda"),
+                language="en",           # Force English — prevents Japanese hallucinations
+                no_speech_threshold=0.6, # Whisper's own silence detector
+                logprob_threshold=-1.0,  # Filter low-confidence words
+                condition_on_previous_text=False,  # Prevents looping same phrase
+                temperature=0.0,         # Greedy decoding — most accurate
+            )
             text = result["text"].strip()
+
+            # Filter hallucinations
+            if text.lower().strip("., ") in self.HALLUCINATIONS:
+                print(f"[MIC] Hallucination filtered: {text}")
+                return ""
+
+            # Filter very short responses (likely noise)
+            if len(text.split()) < 2:
+                print(f"[MIC] Too short, likely noise: {text}")
+                return ""
+
             print(f"[MIC] Transcribed: {text}")
             return text
         except Exception as e:
-            import traceback
             print(f"[Whisper Error] {e}")
-            traceback.print_exc()
             return ""
         finally:
             try:
@@ -393,7 +503,7 @@ class EchoMirrorChatUI:
         self.root = tk.Tk()
         self.root.title("EchoMirror — Conversation")
         self.root.configure(bg=BG)
-        self.root.geometry("800x760")
+        self.root.geometry("860x800")
         self.root.resizable(False, False)
 
         self._build_ui()
@@ -402,10 +512,10 @@ class EchoMirrorChatUI:
 
     def _build_ui(self):
         # Header
-        tk.Label(self.root, text="EchoMirror", font=("Arial", 22, "bold"),
-                 bg=BG, fg=ACCENT).pack(pady=(14, 2))
+        tk.Label(self.root, text="EchoMirror", font=("Segoe UI", 24, "bold"),
+                 bg=BG, fg=ACCENT).pack(pady=(16, 2))
         tk.Label(self.root, text="The power to heal lies within you",
-                 font=("Arial", 10, "italic"), bg=BG, fg=TEXT_GRAY).pack()
+                 font=("Segoe UI", 10, "italic"), bg=BG, fg=TEXT_GRAY).pack(pady=(0,4))
 
         # State bar
         state_frame = tk.Frame(self.root, bg=CARD_BG, pady=6)
@@ -443,8 +553,8 @@ class EchoMirrorChatUI:
 
         # Chat display
         self.chat_display = scrolledtext.ScrolledText(
-            self.root, width=84, height=21,
-            font=("Arial", 11), bg=CARD_BG, fg=TEXT_WHITE,
+            self.root, width=88, height=22,
+            font=("Segoe UI", 11), bg=CARD_BG, fg=TEXT_WHITE,
             insertbackground="white", relief=tk.FLAT,
             wrap=tk.WORD, state=tk.DISABLED
         )
@@ -454,15 +564,19 @@ class EchoMirrorChatUI:
         self.chat_display.tag_config("meta",   foreground=TEXT_GRAY)
         self.chat_display.tag_config("wisdom", foreground=WISDOM_CLR,
                                      font=("Arial", 10, "italic"))
-        self.chat_display.tag_config("system", foreground=TEXT_GOLD)
+        self.chat_display.tag_config("system", foreground=SYSTEM_CLR, font=("Segoe UI", 9, "italic"))
+        self.chat_display.tag_config("user",   foreground=USER_CLR, font=("Segoe UI", 11))
+        self.chat_display.tag_config("echo",   foreground=BOT_CLR,  font=("Segoe UI", 11))
+        self.chat_display.tag_config("meta",   foreground=TEXT_GRAY,font=("Segoe UI", 9))
+        self.chat_display.tag_config("wisdom", foreground=WISDOM_CLR,font=("Segoe UI", 10, "italic"))
 
         # Input area
         input_outer = tk.Frame(self.root, bg=BG)
         input_outer.pack(fill=tk.X, padx=20, pady=4)
 
         self.input_box = tk.Text(
-            input_outer, width=55, height=3,
-            font=("Arial", 11), bg=CARD_BG, fg=TEXT_WHITE,
+            input_outer, width=57, height=3,
+            font=("Segoe UI", 11), bg=CARD_BG, fg=TEXT_WHITE,
             insertbackground="white", relief=tk.FLAT, wrap=tk.WORD
         )
         self.input_box.pack(side=tk.LEFT, padx=(0, 6))
@@ -507,8 +621,8 @@ class EchoMirrorChatUI:
         # Status
         self.status_label = tk.Label(
             self.root,
-            text="Type and press ENTER  |  or click 🎙 SPEAK to use your voice",
-            font=("Arial", 9, "italic"), bg=BG, fg=TEXT_GRAY
+            text="Type a message and press ENTER  |  or click 🎙 SPEAK to talk",
+            font=("Segoe UI", 9, "italic"), bg=BG, fg=TEXT_GRAY
         )
         self.status_label.pack(pady=(2, 8))
 
@@ -526,7 +640,7 @@ class EchoMirrorChatUI:
         self.send_btn.config(state=tk.DISABLED)
         self.input_box.config(state=tk.DISABLED)
         self.tts.stop()  # Stop any ongoing speech when user starts talking
-        self.status_label.config(text="🎙 Listening... Edit text anytime. Click DONE when finished.")
+        self.status_label.config(text="🔴 Recording... Whisper is transcribing. Edit anytime. Click DONE when ready.")
         self._clear_input()
         self.input_box.config(state=tk.NORMAL)  # Keep editable during recording
 
@@ -639,15 +753,17 @@ class EchoMirrorChatUI:
         self.chat_display.config(state=tk.NORMAL)
         ts = datetime.now().strftime("%H:%M")
         if tag == "user":
-            self.chat_display.insert(tk.END, f"\n[{ts}] You\n", "meta")
+            turn_info = f"  Turn {self.engine.turn}" if self.engine.turn > 0 else ""
+            self.chat_display.insert(tk.END, f"\n[{ts}] You{turn_info}\n", "meta")
             self.chat_display.insert(tk.END, f"{message}\n", "user")
         elif tag == "echo":
-            self.chat_display.insert(tk.END, f"\n[{ts}] EchoMirror\n", "meta")
+            emotion = self.engine.emotion.upper()
+            self.chat_display.insert(tk.END, f"\n[{ts}] EchoMirror  [{emotion}]\n", "meta")
             self.chat_display.insert(tk.END, f"{message}\n", "echo")
             if wisdom:
-                self.chat_display.insert(tk.END, f'\n✨ "{wisdom["text"]}"\n', "wisdom")
+                self.chat_display.insert(tk.END, f'\n  ✨ {wisdom["text"]}\n', "wisdom")
         elif tag == "system":
-            self.chat_display.insert(tk.END, f"\n{message}\n", "system")
+            self.chat_display.insert(tk.END, f"\n— {message} —\n", "system")
         self.chat_display.see(tk.END)
         self.chat_display.config(state=tk.DISABLED)
 
@@ -677,7 +793,7 @@ class EchoMirrorChatUI:
                     self.send_btn.config(state=tk.NORMAL)
                     self.mic_btn.config(state=tk.NORMAL)
                     self.status_label.config(
-                        text="✏️ Review your words and press SEND (or edit first)")
+                        text="✏️ Check transcript below — edit if needed, then press SEND")
 
                 elif item[0] == "reply":
                     _, reply, wisdom, exercise = item
